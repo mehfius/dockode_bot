@@ -8,6 +8,11 @@ name = "telegram-bot"
 path = "src/main.rs"
 
 [dependencies]
-teloxide = { version = "0.17", features = ["macros", "rustls"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+teloxide = { version = "0.17", default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 sysinfo = "0.33"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+color-eyre = { version = "0.6", features = ["tracing-error"] }
+tracing-error = "0.2"
+futures-util = "0.3"

@@ -3,8 +3,11 @@ use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use teloxide::utils::command::BotCommands;
 use sysinfo::{System, Disks};
+use tracing::{info, error, debug};
+use tracing_subscriber::EnvFilter;
+use color_eyre::eyre::Result;
 
-#[derive(BotCommands, Clone)]
+#[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Comandos:")]
 enum Command {
     #[command(description = "Métricas completas do servidor")]
@@ -53,7 +56,13 @@ fn get_tunnel_status() -> String {
     }
 }
 
-async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
+async fn answer(
+    bot: Bot,
+    msg: Message,
+    cmd: Command,
+) -> ResponseResult<()> {
+    debug!("answer() called");
+
     match cmd {
         Command::Stats => {
             let mut sys = System::new_all();
@@ -84,24 +93,24 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
             let uptime = System::uptime();
             let days = uptime / 86400;
             let hours = (uptime % 86400) / 3600;
-            let mins = (uptime % 3600) / 60;
+            let mins = uptime % 3600 / 60;
 
             let tunnel = get_tunnel_status();
 
             let stats = format!(
-                "📊 *STATS*\n\n\
-                🖥️ *CPU:* {:.1}%\n\n\
-                🧠 *MEM:* {} / {} ({}%)\n\n\
-                💾 *DISCO:*\n{}\n\n\
-                ⏱️ *UPTIME:* {}d {}h {}m\n\n\
-                🔗 *TUNNEL:* {}",
+                "📊 <b>STATS</b>\n\n\
+                🖥️ <b>CPU:</b> {:.1}%\n\n\
+                🧠 <b>MEM:</b> {} / {} ({}%)\n\n\
+                💾 <b>DISCO:</b>\n{}\n\n\
+                ⏱️ <b>UPTIME:</b> {}d {}h {}m\n\n\
+                🔗 <b>TUNNEL:</b> {}",
                 cpu, format_bytes(mem_used), format_bytes(mem_total), mem_percent,
                 disk_info.join("\n"),
                 days, hours, mins,
                 tunnel
             );
 
-            bot.send_message(msg.chat.id, stats).parse_mode(ParseMode::MarkdownV2).await?;
+            bot.send_message(msg.chat.id, stats).parse_mode(ParseMode::Html).await?;
         }
 
         Command::Cpu => {
@@ -116,8 +125,11 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
                 })
                 .unwrap_or_else(|_| "N/A".to_string());
 
-            let msg_text = format!("🖥️ *CPU*\n\n📈 Uso: *{:.1}%*\n\n📉 Load avg (1m, 5m, 15m): *{}*", cpu, load_avg);
-            bot.send_message(msg.chat.id, msg_text).parse_mode(ParseMode::MarkdownV2).await?;
+            let msg_text = format!(
+                "🖥️ <b>CPU</b>\n\n📈 Uso: <b>{:.1}%</b>\n\n📉 Load avg (1m, 5m, 15m): <b>{}</b>",
+                cpu, load_avg
+            );
+            bot.send_message(msg.chat.id, msg_text).parse_mode(ParseMode::Html).await?;
         }
 
         Command::Mem => {
@@ -131,13 +143,13 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
             let percent = (used as f64 / total as f64 * 100.0) as u32;
 
             let msg_text = format!(
-                "🧠 *MEMORY*\n\n\
+                "🧠 <b>MEMORY</b>\n\n\
                 📊 RAM: {} / {} ({}%)\n\n\
                 💽 SWAP: {} / {}",
                 format_bytes(used), format_bytes(total), percent,
                 format_bytes(swap_used), format_bytes(swap)
             );
-            bot.send_message(msg.chat.id, msg_text).parse_mode(ParseMode::MarkdownV2).await?;
+            bot.send_message(msg.chat.id, msg_text).parse_mode(ParseMode::Html).await?;
         }
 
         Command::Disk => {
@@ -156,7 +168,7 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
                         0
                     };
                     format!(
-                        "📦 *{}*\n   {} / {} ({}%)\n   Livre: {}",
+                        "📦 <b>{}</b>\n   {} / {} ({}%)\n   Livre: {}",
                         d.mount_point().display(),
                         format_bytes(used),
                         format_bytes(total),
@@ -165,8 +177,8 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
                     )
                 }).collect();
 
-                let msg_text = format!("💾 *DISK*\n\n{}", info.join("\n\n"));
-                bot.send_message(msg.chat.id, msg_text).parse_mode(ParseMode::MarkdownV2).await?;
+                let msg_text = format!("💾 <b>DISK</b>\n\n{}", info.join("\n\n"));
+                bot.send_message(msg.chat.id, msg_text).parse_mode(ParseMode::Html).await?;
             }
         }
 
@@ -174,7 +186,7 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
             let uptime = System::uptime();
             let days = uptime / 86400;
             let hours = (uptime % 86400) / 3600;
-            let mins = (uptime % 3600) / 60;
+            let mins = uptime % 3600 / 60;
             let secs = uptime % 60;
 
             let boot_time = System::boot_time();
@@ -184,8 +196,8 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
                 .unwrap_or(0);
 
             let msg_text = format!(
-                "⏱️ *UPTIME*\n\n\
-                ⌛ Tempo ligado: *{}d {}h {}m {}s*\n\n\
+                "⏱️ <b>UPTIME</b>\n\n\
+                ⌛ Tempo ligado: <b>{}d {}h {}m {}s</b>\n\n\
                 🕐 Boot: <t:{}:R>\n\
                 🕓 Agora: <t:{}:R>",
                 days, hours, mins, secs,
@@ -204,18 +216,30 @@ async fn handler(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
+    eprintln!("DEBUG: main() starting");
+
+    color_eyre::install()?;
+
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+
+    info!("Dockode bot starting...");
+
     let token = env::var("TELEGRAM_TOKEN").expect("TELEGRAM_TOKEN not set");
     let chat_id: i64 = env::var("CHAT_ID").expect("CHAT_ID not set").parse()
         .expect("CHAT_ID must be a number");
 
     let bot = Bot::new(token);
 
-    bot.send_message(ChatId(chat_id), "🟢 Servidor ligou — Bot ativo!")
-        .await
-        .expect("Failed to send startup message");
+    if let Err(e) = bot.send_message(ChatId(chat_id), "🟢 Servidor ligou — Bot ativo!").await {
+        error!("Failed to send startup message: {e:?}");
+    }
 
-    println!("Dockode bot iniciado. Aguardando comandos...");
+    info!("Bot running. Waiting for commands...");
 
-    Command::repl(bot, handler).await;
+    Command::repl(bot.clone(), answer).await;
+
+    Ok(())
 }
